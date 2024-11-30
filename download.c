@@ -1,4 +1,5 @@
 #include "download.h"
+#include <string.h>
 
 int parseURL(char* url, URLParameters* connection) {
     const char *prefix = "ftp://";
@@ -67,10 +68,58 @@ int connectToServer(URLParameters connection) {
         return -1;
     }
 
-    printf("CONNECTION SUCCESS!\n");
+    char response[MAX_RESPONSE] = {0};
+    
+    read(sockfd, response, MAX_RESPONSE);
+
+    printf("%s\n", response);
+
+    if (strncmp(WELCOME_CODE, response, 3) != 0) {
+        printf("ERROR: Did not respond with 220\n");
+        return -1;
+    }
 
     return sockfd;
 }
+
+int loginToServer(URLParameters connection, int sockfd) {
+    char user[6 + strlen(connection.user)];
+    char password[6 + strlen(connection.password)];
+    char response[MAX_RESPONSE] = {0};
+    
+    strcpy(user, "USER ");
+    strcat(user, connection.user);
+    user[strlen(connection.user) + 5] = '\n';
+
+    strcpy(password, "PASS ");
+    strcat(password, connection.password);
+    password[strlen(connection.password) + 5] = '\n';
+
+    write(sockfd, user, strlen(user));
+    sleep(1);
+
+    read(sockfd, response, MAX_RESPONSE);
+    printf("%s\n", response);
+
+    if (strncmp(PASSWORD_CODE, response, 3) != 0) {
+        printf("ERROR: Did not respond with 331\n");
+        return -1;
+    }
+
+    write(sockfd, password, strlen(password));
+    sleep(1);
+
+    read(sockfd, response, MAX_RESPONSE);
+    printf("%s\n", response);
+
+    if (strncmp(LOGIN_SUCCESS_CODE, response, 3) != 0) {
+        printf("ERROR: Did not respond with 230\n");
+        return -1;
+    }
+    
+    return 0;
+}
+
 
 int closeConnection(int sockfd) {
     if (close(sockfd)<0) {
@@ -99,7 +148,12 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    // loginHost
+    if (loginToServer(connection, sockfd) < 0) {
+        printf("ERROR: Could not log into FTP server\n");
+        exit(-1);
+    }
+
+    // passiveMode
 
     // getPath
 
