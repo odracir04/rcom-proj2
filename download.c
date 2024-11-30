@@ -39,6 +39,48 @@ int parseURL(char* url, URLParameters* connection) {
     return 0;
 }
 
+int connectToServer(URLParameters connection) {
+    struct hostent *h;
+    int sockfd;
+    struct sockaddr_in server_addr;
+
+    if ((h = gethostbyname(connection.host)) == NULL) {
+        printf("ERROR: Could not resolve host\n");
+        return -1;
+    }
+
+    char* ip_addr = inet_ntoa(*((struct in_addr *) h->h_addr));
+    printf("Resolved host, IP is %s\n", ip_addr);
+
+    bzero((char *) &server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(ip_addr);
+    server_addr.sin_port = htons(SERVER_PORT);
+
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("ERROR: Could not open socket\n");
+        return -1;
+    }
+
+    if (connect(sockfd,(struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+        printf("ERROR: Could not connect to host\n");
+        return -1;
+    }
+
+    printf("CONNECTION SUCCESS!\n");
+
+    return sockfd;
+}
+
+int closeConnection(int sockfd) {
+    if (close(sockfd)<0) {
+        printf("ERROR: Could not close socket\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         printf("Usage: download ftp://[<user>:<password>@]<host>/<url-path>\n");
@@ -51,18 +93,22 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    printf("User: %s\n", connection.user ? connection.user : "(null)");
-    printf("Password: %s\n", connection.password ? connection.password : "(null)");
-    printf("Host: %s\n", connection.host ? connection.host : "(null)");
-    printf("URL Path: %s\n", connection.url_path ? connection.url_path : "(null)");
-
-    // connectToServer
+    int sockfd;
+    if ((sockfd = connectToServer(connection)) < 0) {
+        printf("ERROR: Could not connect to FTP server\n");
+        exit(-1);
+    }
 
     // loginHost
 
     // getPath
 
     // getFile (return success or unsuccess)
+
+    if (closeConnection(sockfd) < 0) {
+        printf("ERROR: Could not close connection\n");
+        exit(-1);
+    }
 
     return 0;
 }

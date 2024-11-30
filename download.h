@@ -5,10 +5,13 @@
 #include <stdlib.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #include<arpa/inet.h>
 #include <string.h>
 
 #define PREFIX_LENGTH 6
+#define SERVER_PORT 21
 
 typedef struct {
     char* user;
@@ -18,5 +21,7 @@ typedef struct {
 } URLParameters;
 
 int parseURL(char* url, URLParameters* connection);
+int connectToServer(URLParameters connection);
+int closeConnection(int sockfd);
 
 #endif
