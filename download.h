@@ -12,11 +12,12 @@
 
 #define PREFIX_LENGTH 6
 #define SERVER_PORT 21
-#define MAX_RESPONSE 2000
+#define MAX_RESPONSE 5000
 
 #define WELCOME_CODE "220"
 #define PASSWORD_CODE "331"
 #define LOGIN_SUCCESS_CODE "230"
+#define PASSIVE_MODE_CODE "227"
 
 typedef struct {
     char* user;
@@ -28,6 +29,7 @@ typedef struct {
 int parseURL(char* url, URLParameters* connection);
 int connectToServer(URLParameters connection);
 int loginToServer(URLParameters connection, int sockfd);
-int closeConnection(int sockfd);
+int passiveMode(int sockfd1, int* sockfd2);
+int closeConnection(int sockfd1, int sockfd2);
 
 #endif
