@@ -1,4 +1,6 @@
 #include "download.h"
+#include <string.h>
+#include <unistd.h>
 
 int parseURL(char* url, URLParameters* connection) {
     const char *prefix = "ftp://";
@@ -44,18 +46,22 @@ int connectToServer(URLParameters connection) {
     int sockfd;
     struct sockaddr_in server_addr;
 
-    if ((h = gethostbyname(connection.host)) == NULL) {
-        printf("ERROR: Could not resolve host\n");
-        return -1;
-    }
+    if (connection.ip_addr == NULL) {
+        if ((h = gethostbyname(connection.host)) == NULL) {
+            printf("ERROR: Could not resolve host\n");
+            return -1;
+        }
 
-    char* ip_addr = inet_ntoa(*((struct in_addr *) h->h_addr));
-    printf("Resolved host, IP is %s\n", ip_addr);
+        char* ip_addr = inet_ntoa(*((struct in_addr *) h->h_addr));
+        connection.ip_addr = strdup(ip_addr);
+        connection.port = SERVER_PORT;
+        printf("Resolved host, IP is %s\n", ip_addr);   
+    } 
 
     bzero((char *) &server_addr, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(ip_addr);
-    server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_addr.s_addr = inet_addr(connection.ip_addr);
+    server_addr.sin_port = htons(connection.port);
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("ERROR: Could not open socket\n");
@@ -68,36 +74,32 @@ int connectToServer(URLParameters connection) {
     }
 
     sleep(1);
-    char response[MAX_RESPONSE] = {0};
     
-    read(sockfd, response, MAX_RESPONSE);
+    if (connection.port == 21) {
+        char response[MAX_RESPONSE] = {0};
+        read(sockfd, response, MAX_RESPONSE);
+        printf("%s\n", response);
 
-    printf("%s\n", response);
-
-    if (strncmp(WELCOME_CODE, response, 3) != 0) {
-        printf("ERROR: Did not respond with 220\n");
-        return -1;
+        if (strncmp(WELCOME_CODE, response, 3) != 0) {
+            printf("ERROR: Did not respond with 220\n");
+            return -1;
+        }
     }
 
     return sockfd;
 }
 
 int loginToServer(URLParameters connection, int sockfd) {
-    char user[6 + strlen(connection.user)];
-    char password[6 + strlen(connection.password)];
+    char user[8 + strlen(connection.user)];
+    char password[8 + strlen(connection.password)];
     char response[MAX_RESPONSE] = {0};
     
-    strcpy(user, "USER ");
-    strcat(user, connection.user);
-    user[strlen(connection.user) + 5] = '\n';
-
-    strcpy(password, "PASS ");
-    strcat(password, connection.password);
-    password[strlen(connection.password) + 5] = '\n';
+    sprintf(user, "USER %s\r\n", connection.user);
+    sprintf(password, "PASS %s\r\n", connection.password);
 
     write(sockfd, user, strlen(user));
     printf("%s\n", user);
-    sleep(1);
+    sleep(2);
 
     read(sockfd, response, MAX_RESPONSE);
     printf("%s\n", response);
@@ -109,7 +111,7 @@ int loginToServer(URLParameters connection, int sockfd) {
 
     write(sockfd, password, strlen(password));
     printf("%s\n", password);
-    sleep(1);
+    sleep(2);
 
     read(sockfd, response, MAX_RESPONSE);
     printf("%s\n", response);
@@ -122,21 +124,20 @@ int loginToServer(URLParameters connection, int sockfd) {
     return 0;
 }
 
-int passiveMode(int sockfd1, int* sockfd2) {
+int passiveMode(URLParameters connection, int sockfd1, int* sockfd2) {
     char ip_addr[20];
     int port;
     char response[MAX_RESPONSE] = {0};
     int num1, num2, num3, num4, num5, num6;
-    struct sockaddr_in server_addr;
 
-    write(sockfd1, "pasv\n", 5);
+    write(sockfd1, "pasv\r\n", 6);
     sleep(1);
 
     read(sockfd1, response, MAX_RESPONSE);
-    printf("%s\n", response);
+    printf("%s\r\n", response);
 
     if (strncmp(PASSIVE_MODE_CODE, response, 3) != 0) {
-        printf("ERROR: Did not respond with 230\n");
+        printf("ERROR: Did not respond with 227\n");
         return -1;
     }
 
@@ -147,22 +148,44 @@ int passiveMode(int sockfd1, int* sockfd2) {
         printf("Connection to open at address %s, port %d\n", ip_addr, port);   
     } 
 
-    bzero((char *) &server_addr, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(ip_addr);
-    server_addr.sin_port = htons(SERVER_PORT);
+    connection.ip_addr = ip_addr;
+    connection.port = port;
 
-    if ((*sockfd2 = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("ERROR: Could not open socket\n");
-        return -1;
-    }
-
-    if (connect(*sockfd2,(struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
-        printf("ERROR: Could not connect to host\n");
-        return -1;
+    if ((*sockfd2 = connectToServer(connection)) < 0) {
+        printf("ERROR: Could not connect to FTP server\n");
+        exit(-1);
     }
     
     printf("Connection opened at address %s, port %d\n", ip_addr, port);
+    return 0;
+}
+
+int getFile(URLParameters connection, int sockfd1, int sockfd2) {
+    char retr[8 + strlen(connection.url_path)];
+    char response[MAX_RESPONSE];
+    char filename[100];
+    FILE* file; int bytes;
+    
+    sprintf(retr, "retr %s\r\n", connection.url_path);
+
+    printf("%s", retr);
+    write(sockfd1, retr, strlen(retr));
+    sleep(1);
+
+    const char *last_slash = strrchr(connection.url_path, '/');
+    if (last_slash) {
+        strcpy(filename, last_slash + 1);
+    } else {
+        strcpy(filename, connection.url_path);
+    }
+
+    file = fopen(filename, "w+");
+
+    while((bytes = read(sockfd2, response, MAX_RESPONSE)) > 0) {
+        printf("bytes: %d\n", bytes);
+        fwrite(response, sizeof(char), bytes, file);
+    }
+
     return 0;
 }
 
@@ -186,7 +209,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    URLParameters connection = {NULL, NULL, NULL, NULL};
+    URLParameters connection = {NULL, NULL, NULL, NULL, NULL, 0};
     int sockfd1, sockfd2;
 
     if (parseURL(argv[1], &connection) < 0) {
@@ -204,14 +227,15 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    if (passiveMode(sockfd1, &sockfd2) < 0) {
+    if (passiveMode(connection, sockfd1, &sockfd2) < 0) {
         printf("ERROR: Could not enter passive mode\n");
         exit(-1);
     }
 
-    // getPath
-
-    // getFile (return success or unsuccess)
+    if (getFile(connection, sockfd1, sockfd2) < 0) {
+        printf("ERROR: Could not enter fetch file\n");
+        exit(-1);
+    }
 
     if (closeConnection(sockfd1, sockfd2) < 0) {
         printf("ERROR: Could not close connection\n");

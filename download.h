@@ -18,18 +18,23 @@
 #define PASSWORD_CODE "331"
 #define LOGIN_SUCCESS_CODE "230"
 #define PASSIVE_MODE_CODE "227"
+#define OPENING_CODE "150"
+#define ALREADY_OPEN_CODE "125"
 
 typedef struct {
     char* user;
     char* password;
     char* host;
     char* url_path;
+    char* ip_addr;
+    int port;
 } URLParameters;
 
 int parseURL(char* url, URLParameters* connection);
 int connectToServer(URLParameters connection);
 int loginToServer(URLParameters connection, int sockfd);
-int passiveMode(int sockfd1, int* sockfd2);
+int passiveMode(URLParameters connection, int sockfd1, int* sockfd2);
+int getFile(URLParameters connection, int sockfd1, int sockfd2);
 int closeConnection(int sockfd1, int sockfd2);
 
 #endif
