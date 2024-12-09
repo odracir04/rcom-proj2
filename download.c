@@ -43,7 +43,7 @@ int parseURL(char* url, URLParameters* connection) {
 
 int connectToServer(URLParameters connection) {
     struct hostent *h;
-    int sockfd;
+    int sockfd, bytes;
     struct sockaddr_in server_addr;
 
     if (connection.ip_addr == NULL) {
@@ -77,7 +77,8 @@ int connectToServer(URLParameters connection) {
     
     if (connection.port == 21) {
         char response[MAX_RESPONSE] = {0};
-        read(sockfd, response, MAX_RESPONSE);
+        bytes = read(sockfd, response, MAX_RESPONSE - 1);
+        response[bytes] = '\0';
         printf("%s\n", response);
 
         if (strncmp(WELCOME_CODE, response, 3) != 0) {
@@ -90,6 +91,7 @@ int connectToServer(URLParameters connection) {
 }
 
 int loginToServer(URLParameters connection, int sockfd) {
+    int bytes;
     char user[8 + strlen(connection.user)];
     char password[8 + strlen(connection.password)];
     char response[MAX_RESPONSE] = {0};
@@ -101,7 +103,8 @@ int loginToServer(URLParameters connection, int sockfd) {
     printf("%s\n", user);
     sleep(2);
 
-    read(sockfd, response, MAX_RESPONSE);
+    bytes = read(sockfd, response, MAX_RESPONSE - 1);
+    response[bytes] = '\0';
     printf("%s\n", response);
 
     if (strncmp(PASSWORD_CODE, response, 3) != 0) {
@@ -113,7 +116,8 @@ int loginToServer(URLParameters connection, int sockfd) {
     printf("%s\n", password);
     sleep(2);
 
-    read(sockfd, response, MAX_RESPONSE);
+    bytes = read(sockfd, response, MAX_RESPONSE - 1);
+    response[bytes] = '\0';
     printf("%s\n", response);
 
     if (strncmp(LOGIN_SUCCESS_CODE, response, 3) != 0) {
@@ -126,15 +130,17 @@ int loginToServer(URLParameters connection, int sockfd) {
 
 int passiveMode(URLParameters connection, int sockfd1, int* sockfd2) {
     char ip_addr[20];
-    int port;
+    int port, bytes;
     char response[MAX_RESPONSE] = {0};
     int num1, num2, num3, num4, num5, num6;
 
     write(sockfd1, "pasv\r\n", 6);
+    printf("pasv\n");
     sleep(1);
 
-    read(sockfd1, response, MAX_RESPONSE);
-    printf("%s\r\n", response);
+    bytes = read(sockfd1, response, MAX_RESPONSE - 1);
+    response[bytes] = '\0';
+    printf("%s\n", response);
 
     if (strncmp(PASSIVE_MODE_CODE, response, 3) != 0) {
         printf("ERROR: Did not respond with 227\n");
@@ -144,8 +150,7 @@ int passiveMode(URLParameters connection, int sockfd1, int* sockfd2) {
     if (sscanf(response, "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d).", 
                &num1, &num2, &num3, &num4, &num5, &num6) == 6) {
         sprintf(ip_addr, "%d.%d.%d.%d", num1, num2, num3, num4);
-        port = 256 * num5 + num6;
-        printf("Connection to open at address %s, port %d\n", ip_addr, port);   
+        port = 256 * num5 + num6;  
     } 
 
     connection.ip_addr = ip_addr;
@@ -170,7 +175,6 @@ int getFile(URLParameters connection, int sockfd1, int sockfd2) {
 
     printf("%s", retr);
     write(sockfd1, retr, strlen(retr));
-    sleep(1);
 
     const char *last_slash = strrchr(connection.url_path, '/');
     if (last_slash) {
@@ -179,22 +183,56 @@ int getFile(URLParameters connection, int sockfd1, int sockfd2) {
         strcpy(filename, connection.url_path);
     }
 
+    bytes = read(sockfd1, response, MAX_RESPONSE - 1);
+    response[bytes] = '\0';
+    printf("%s\n", response);
+
+    if (strncmp(OPENING_CODE, response, 3) != 0 && strncmp(ALREADY_OPEN_CODE, response, 3) != 0) {
+        printf("ERROR: Did not respond with 125 or 150\n");
+        return -1;
+    }
     file = fopen(filename, "w+");
 
     while((bytes = read(sockfd2, response, MAX_RESPONSE)) > 0) {
         fwrite(response, sizeof(char), bytes, file);
     }
 
+    fclose(file);
     return 0;
 }
 
 int closeConnection(int sockfd1, int sockfd2) {
-    if (close(sockfd1)<0) {
+    char response[MAX_RESPONSE];
+    int bytes;
+
+    if (close(sockfd2)<0) {
         printf("ERROR: Could not close socket\n");
         return -1;
     }
 
-    if (close(sockfd2)<0) {
+    bytes = read(sockfd1, response, MAX_RESPONSE - 1);
+    response[bytes] = '\0';
+    printf("%s\n", response);
+
+    if (strncmp(TRANSFER_COMPLETE_CODE, response, 3) != 0) {
+        printf("ERROR: Transfer not completed correctly\n");
+        return -1;
+    }
+
+    write(sockfd1, "quit\r\n", 6);
+    printf("quit\n");
+    sleep(1);
+
+    bytes = read(sockfd1, response, MAX_RESPONSE - 1);
+    response[bytes] = '\0';
+    printf("%s", response);
+
+    if (strncmp(GOODBYE_CODE, response, 3) != 0) {
+        printf("ERROR: Did not respond with 221\n");
+        return -1;
+    }
+
+    if (close(sockfd1)<0) {
         printf("ERROR: Could not close socket\n");
         return -1;
     }

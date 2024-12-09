@@ -20,6 +20,8 @@
 #define PASSIVE_MODE_CODE "227"
 #define OPENING_CODE "150"
 #define ALREADY_OPEN_CODE "125"
+#define GOODBYE_CODE "221"
+#define TRANSFER_COMPLETE_CODE "226"
 
 typedef struct {
     char* user;
