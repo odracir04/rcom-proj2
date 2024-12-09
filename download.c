@@ -182,7 +182,6 @@ int getFile(URLParameters connection, int sockfd1, int sockfd2) {
     file = fopen(filename, "w+");
 
     while((bytes = read(sockfd2, response, MAX_RESPONSE)) > 0) {
-        printf("bytes: %d\n", bytes);
         fwrite(response, sizeof(char), bytes, file);
     }
 
