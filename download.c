@@ -100,7 +100,7 @@ int loginToServer(URLParameters connection, int sockfd) {
     sprintf(password, "PASS %s\r\n", connection.password);
 
     write(sockfd, user, strlen(user));
-    printf("%s\n", user);
+    printf("> %s\n", user);
     sleep(2);
 
     bytes = read(sockfd, response, MAX_RESPONSE - 1);
@@ -113,7 +113,7 @@ int loginToServer(URLParameters connection, int sockfd) {
     }
 
     write(sockfd, password, strlen(password));
-    printf("%s\n", password);
+    printf("> %s\n", password);
     sleep(2);
 
     bytes = read(sockfd, response, MAX_RESPONSE - 1);
@@ -135,7 +135,7 @@ int passiveMode(URLParameters connection, int sockfd1, int* sockfd2) {
     int num1, num2, num3, num4, num5, num6;
 
     write(sockfd1, "pasv\r\n", 6);
-    printf("pasv\n");
+    printf("> pasv\n\n");
     sleep(1);
 
     bytes = read(sockfd1, response, MAX_RESPONSE - 1);
@@ -173,7 +173,7 @@ int getFile(URLParameters connection, int sockfd1, int sockfd2) {
     
     sprintf(retr, "retr %s\r\n", connection.url_path);
 
-    printf("%s", retr);
+    printf("> %s\n", retr);
     write(sockfd1, retr, strlen(retr));
 
     const char *last_slash = strrchr(connection.url_path, '/');
@@ -220,7 +220,7 @@ int closeConnection(int sockfd1, int sockfd2) {
     }
 
     write(sockfd1, "quit\r\n", 6);
-    printf("quit\n");
+    printf("> quit\n\n");
     sleep(1);
 
     bytes = read(sockfd1, response, MAX_RESPONSE - 1);
